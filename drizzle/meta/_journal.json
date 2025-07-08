@@ -1,5 +1,13 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "entries": []
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1744237686555,
+      "tag": "0000_round_mad_thinker",
+      "breakpoints": true
+    }
+  ]
 }

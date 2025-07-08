@@ -1,0 +1,2511 @@
+our shadcn is in @repo/ui/components/ui/---component-name
+our table components are in @repo/ui/components/Table
+we have to create tables now . 
+we have an advanced layout for creating tables , advanced , with rsc setup. 
+
+you have to see the patterns. 
+i'll demonstrate that with an example 
+------------------------------
+advanced layout component 
+"use client";
+
+import type { ColumnDef, Row, Table } from "@tanstack/react-table";
+import * as React from "react";
+import { DataTable } from "@repo/ui/components/Table/components/data-table";
+import { DataTableAdvancedToolbar } from "@repo/ui/components/Table/components/data-table-advanced-toolbar";
+import { DataTableFilterList } from "@repo/ui/components/Table/components/data-table-filter-list";
+import { DataTableFilterMenu } from "@repo/ui/components/Table/components/data-table-filter-menu";
+import { DataTableSortList } from "@repo/ui/components/Table/components/data-table-sort-list";
+import { DataTableToolbar } from "@repo/ui/components/Table/components/data-table-toolbar";
+import { useDataTable } from "@repo/ui/components/Table/hooks/use-data-table";
+import type {
+  DataTableRowAction,
+  ExtendedColumnSort,
+} from "@repo/shared/utils/table/types/data-table";
+import { useTableFilterMode } from "@repo/ui/components/Table/feature-flags";
+import { cn } from "@repo/ui/lib/utils";
+
+// Base action dialog props
+interface BaseActionDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  showTrigger?: boolean;
+  onSuccess?: () => void;
+}
+
+interface SingleItemActionDialogProps<TData> extends BaseActionDialogProps {
+  data: TData | null;
+}
+
+interface MultiItemActionDialogProps<TData> extends BaseActionDialogProps {
+  data: TData[];
+}
+
+interface TableData<TData> {
+  data: TData[];
+  pageCount: number;
+}
+
+// Separate action configurations for better type safety
+interface SingleActionConfig<TData extends Record<string, unknown>> {
+  component: React.ComponentType<SingleItemActionDialogProps<TData>>;
+  dataType: "single";
+  shouldDeselectOnSuccess?: boolean;
+}
+
+interface MultiActionConfig<TData extends Record<string, unknown>> {
+  component: React.ComponentType<MultiItemActionDialogProps<TData>>;
+  dataType: "multi";
+  shouldDeselectOnSuccess?: boolean;
+}
+
+// Union type for action configurations
+type ActionConfig<TData extends Record<string, unknown>> =
+  | SingleActionConfig<TData>
+  | MultiActionConfig<TData>;
+
+// Type-safe action registry
+type ActionRegistry<
+  TData extends Record<string, unknown>,
+  TActions extends string,
+> = {
+  [K in TActions]?: ActionConfig<TData>;
+};
+
+interface AdvancedDataTableProps<
+  TData extends Record<string, unknown>,
+  TActions extends string = string,
+  TFilterMetadataSchema = unknown,
+> {
+  className?: string;
+  tableData: TableData<TData>;
+  filterMetadata: TFilterMetadataSchema;
+  getColumns: (
+    filterMetadata: TFilterMetadataSchema,
+    setRowAction: (action: DataTableRowAction<TData> | null) => void
+  ) => ColumnDef<TData, unknown>[];
+  getRowId: (row: TData) => string;
+  initialSorting?: ExtendedColumnSort<TData>[];
+  initialColumnPinning?: { left?: string[]; right?: string[] };
+  ActionBar?: React.ComponentType<{ table: Table<TData> }>;
+  shallow?: boolean;
+  debounceMs?: number;
+  throttleMs?: number;
+  actions?: ActionRegistry<TData, TActions>;
+  clearOnDefault?: boolean;
+}
+
+// Constants
+const DEFAULT_INITIAL_PINNING = { right: ["actions"] } satisfies {
+  left?: string[];
+  right?: string[];
+};
+
+// Helper function overloads for better type safety
+export function createSingleAction<TData extends Record<string, unknown>>(
+  component: React.ComponentType<SingleItemActionDialogProps<TData>>,
+  options?: { shouldDeselectOnSuccess?: boolean }
+): SingleActionConfig<TData> {
+  return {
+    component,
+    dataType: "single",
+    shouldDeselectOnSuccess: true,
+    ...options,
+  };
+}
+
+export function createMultiAction<TData extends Record<string, unknown>>(
+  component: React.ComponentType<MultiItemActionDialogProps<TData>>,
+  options?: { shouldDeselectOnSuccess?: boolean }
+): MultiActionConfig<TData> {
+  return {
+    component,
+    dataType: "multi",
+    shouldDeselectOnSuccess: true,
+    ...options,
+  };
+}
+
+// Generic action creator (less type-safe but more flexible)
+export function createAction<TData extends Record<string, unknown>>(
+  config: ActionConfig<TData>
+): ActionConfig<TData> {
+  return {
+    shouldDeselectOnSuccess: true,
+    ...config,
+  };
+}
+
+export function AdvancedDataTable<
+  TData extends Record<string, unknown>,
+  TActions extends string = string,
+  TFilterMetadataSchema = unknown,
+>({
+  tableData,
+  className,
+  filterMetadata,
+  getColumns,
+  getRowId,
+  initialSorting = [],
+  initialColumnPinning = DEFAULT_INITIAL_PINNING,
+  ActionBar,
+  shallow = false,
+  actions = {},
+  clearOnDefault = true,
+}: AdvancedDataTableProps<TData, TActions, TFilterMetadataSchema>) {
+  const { isAdvancedFilteringEnabled, currentMode } = useTableFilterMode();
+  const isExpertMode = currentMode === "expert";
+
+  const { data, pageCount } = tableData;
+  const [rowAction, setRowAction] =
+    React.useState<DataTableRowAction<TData> | null>(null);
+
+  // Memoize columns to prevent unnecessary re-renders
+  const columns = React.useMemo(
+    () => getColumns(filterMetadata, setRowAction),
+    [filterMetadata, getColumns]
+  );
+
+  // Initialize data table with proper configuration
+  const {
+    table,
+    shallow: tableShallow,
+    debounceMs: tableDebounceMs,
+    throttleMs: tableThrottleMs,
+  } = useDataTable({
+    data,
+    columns,
+    pageCount,
+    enableAdvancedFilter: isAdvancedFilteringEnabled,
+    initialState: {
+      sorting: initialSorting,
+      columnPinning: initialColumnPinning,
+    },
+    getRowId,
+    shallow,
+    clearOnDefault,
+  });
+
+  // Action success handler
+  const handleActionSuccess = React.useCallback(
+    (actionVariant: string) => {
+      const actionConfig = actions[actionVariant as TActions];
+
+      if (actionConfig?.shouldDeselectOnSuccess && rowAction?.row) {
+        (rowAction.row as Row<TData>).toggleSelected(false);
+      }
+
+      setRowAction(null);
+    },
+    [actions, rowAction]
+  );
+
+  const handleCloseDialog = React.useCallback(() => {
+    setRowAction(null);
+  }, []);
+
+  // Type-safe action dialog rendering with proper type discrimination
+  const renderActionDialog = React.useCallback(
+    (variant: string, config: ActionConfig<TData>) => {
+      if (!rowAction || rowAction.variant !== variant) {
+        return null;
+      }
+
+      const baseProps = {
+        open: true,
+        onOpenChange: handleCloseDialog,
+        showTrigger: false,
+        onSuccess: () => handleActionSuccess(variant),
+      };
+
+      const original = rowAction.row?.original;
+
+      // Type-safe rendering based on action configuration
+      if (config.dataType === "single") {
+        const SingleComponent = config.component;
+        return (
+          <SingleComponent
+            key={`action-dialog-${variant}`}
+            {...baseProps}
+            data={original ?? null}
+          />
+        );
+      }
+      const MultiComponent = config.component;
+      return (
+        <MultiComponent
+          key={`action-dialog-${variant}`}
+          {...baseProps}
+          data={original ? [original] : []}
+        />
+      );
+    },
+    [rowAction, handleCloseDialog, handleActionSuccess]
+  );
+
+  // Render toolbar based on filtering mode
+  const renderToolbar = () => {
+    const commonProps = {
+      table,
+      shallow: tableShallow,
+      debounceMs: tableDebounceMs,
+      throttleMs: tableThrottleMs,
+    };
+
+    if (isAdvancedFilteringEnabled) {
+      return (
+        <DataTableAdvancedToolbar table={table}>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              {isExpertMode ? (
+                <DataTableFilterList {...commonProps} align="start" />
+              ) : (
+                <DataTableFilterMenu {...commonProps} />
+              )}
+              <DataTableSortList table={table} align="start" />
+            </div>
+          </div>
+        </DataTableAdvancedToolbar>
+      );
+    }
+
+    return (
+      <DataTableToolbar table={table}>
+        <div className="flex items-center justify-end">
+          <DataTableSortList table={table} align="end" />
+        </div>
+      </DataTableToolbar>
+    );
+  };
+
+  // Render all configured action dialogs
+  const actionDialogs = React.useMemo(() => {
+    return Object.entries(actions).reduce<React.ReactNode[]>(
+      (acc, [variant, config]) => {
+        if (config) {
+          const dialog = renderActionDialog(
+            variant,
+            config as ActionConfig<TData>
+          );
+          if (dialog) acc.push(dialog);
+        }
+        return acc;
+      },
+      []
+    );
+  }, [actions, renderActionDialog]);
+
+  return (
+    <div
+      className={cn(`${className ?? " max-w-7xl space-y-4 overflow-x-auto "}`)}
+    >
+      <div>
+        <DataTable
+          table={table}
+          actionBar={ActionBar ? <ActionBar table={table} /> : undefined}
+        >
+          <div className="px-4 py-3">{renderToolbar()}</div>
+        </DataTable>
+      </div>
+      {actionDialogs}
+    </div>
+  );
+}
+^----@repo/ui/components/Table/Layout/tablelayout.tsx
+
+
+
+------------------------------
+
+@repo/ui/components/ActionDialog/index.tsx
+
+type ActionType =
+  | 'delete'
+  | 'edit'
+  | 'archive'
+  | 'restore'
+  | 'ban'
+  | 'unban'
+  | 'deactivate'
+  | 'activate';
+
+interface ActionConfig {
+  type: ActionType;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  variant:
+    | 'default'
+    | 'destructive'
+    | 'outline'
+    | 'secondary'
+    | 'ghost'
+    | 'link';
+  confirmationTitle: string;
+  confirmationDescription: string;
+  successMessage: string;
+  loadingMessage?: string;
+}
+
+const DEFAULT_ACTION_CONFIGS: Record<ActionType, Omit<ActionConfig, 'type'>> = {
+  delete: {
+    label: 'Delete',
+    icon: Trash,
+    variant: 'destructive',
+    confirmationTitle: 'Delete Items',
+    confirmationDescription:
+      'This action cannot be undone. This will permanently delete the selected items from our servers.',
+    successMessage: 'Items deleted successfully',
+    loadingMessage: 'Deleting items...',
+  },
+  edit: {
+    label: 'Edit',
+    icon: Edit,
+    variant: 'outline',
+    confirmationTitle: 'Edit Items',
+    confirmationDescription:
+      'This will apply the selected changes to all selected items.',
+    successMessage: 'Items updated successfully',
+    loadingMessage: 'Updating items...',
+  },
+  archive: {
+    label: 'Archive',
+    icon: Archive,
+    variant: 'outline',
+    confirmationTitle: 'Archive Items',
+    confirmationDescription:
+      'This will move the selected items to your archive. You can restore them later.',
+    successMessage: 'Items archived successfully',
+  },
+  restore: {
+    label: 'Restore',
+    icon: Archive,
+    variant: 'outline',
+    confirmationTitle: 'Restore Items',
+    confirmationDescription:
+      'This will restore the selected items from your archive.',
+    successMessage: 'Items restored successfully',
+  },
+  ban: {
+    label: 'Ban',
+    icon: Ban,
+    variant: 'destructive',
+    confirmationTitle: 'Ban Users',
+    confirmationDescription:
+      'This will ban the selected users from accessing the platform.',
+    successMessage: 'Users banned successfully',
+  },
+  unban: {
+    label: 'Unban',
+    icon: UserX,
+    variant: 'outline',
+    confirmationTitle: 'Unban Users',
+    confirmationDescription: 'This will restore access for the selected users.',
+    successMessage: 'Users unbanned successfully',
+  },
+  deactivate: {
+    label: 'Deactivate',
+    icon: UserX,
+    variant: 'outline',
+    confirmationTitle: 'Deactivate Items',
+    confirmationDescription:
+      'This will temporarily deactivate the selected items.',
+    successMessage: 'Items deactivated successfully',
+  },
+  activate: {
+    label: 'Activate',
+    icon: UserX,
+    variant: 'outline',
+    confirmationTitle: 'Activate Items',
+    confirmationDescription: 'This will activate the selected items.',
+    successMessage: 'Items activated successfully',
+  },
+};
+
+interface GenericActionDialogProps<TData>
+  extends React.ComponentPropsWithoutRef<typeof Dialog> {
+  data: TData[];
+  itemName: string; // "task", "user", "product"
+  action: ActionType | ActionConfig;
+  onClick: (ids: string[]) => Promise<{ error?: string; message?: string }>;
+  showTrigger?: boolean;
+  triggerClassName?: string;
+  onSuccess?: (data: TData[]) => void;
+  onError?: (error: string, data: TData[]) => void;
+  disabled?: boolean;
+  requireConfirmation?: boolean;
+  customMessages?: {
+    confirmationTitle?: string;
+    confirmationDescription?: string;
+    successMessage?: string;
+    errorMessage?: string;
+  };
+}
+export function GenericActionDialog<
+  TData extends { id: string; name?: string | null; title?: string | null },
+>({
+  data,
+  itemName,
+  action,
+  onClick,
+  showTrigger = true,
+  triggerClassName,
+  onSuccess,
+  onError,
+  disabled = false,
+  requireConfirmation = true,
+  customMessages,
+  ...props
+}: GenericActionDialogProps<TData>) {
+  const [isPending, startTransition] = React.useTransition();
+  const [isOpen, setIsOpen] = React.useState(false);
+  const isDesktop = useMediaQuery('(min-width: 640px)');
+
+  // Get action configuration
+  const actionConfig: ActionConfig = React.useMemo(() => {
+    if (typeof action === 'string') {
+      return { type: action, ...DEFAULT_ACTION_CONFIGS[action] };
+    }
+    return action;
+  }, [action]);
+
+  // Generate contextual messages
+  const messages = React.useMemo(() => {
+    const itemCount = data.length;
+    const itemText = itemCount === 1 ? itemName : `${itemName}s`;
+    const itemNames =
+      data.length <= 3
+        ? data
+            .map((item) => item.name || item.title || `${itemName} ${item.id}`)
+            .join(', ')
+        : `${itemCount} ${itemText}`;
+
+    return {
+      confirmationTitle:
+        customMessages?.confirmationTitle ||
+        `${actionConfig.confirmationTitle} (${itemCount})`,
+      confirmationDescription:
+        customMessages?.confirmationDescription ||
+        `${actionConfig.confirmationDescription} You are about to ${actionConfig.label.toLowerCase()} ${itemNames}.`,
+      successMessage:
+        customMessages?.successMessage ||
+        `${itemCount} ${itemText} ${actionConfig.label.toLowerCase()}${actionConfig.type === 'delete' ? 'd' : actionConfig.type === 'edit' ? 'ed' : 'd'} successfully`,
+      errorMessage:
+        customMessages?.errorMessage ||
+        `Failed to ${actionConfig.label.toLowerCase()} ${itemText}`,
+    };
+  }, [data, itemName, actionConfig, customMessages]);
+
+  const handleAction = React.useCallback(async () => {
+    if (requireConfirmation) {
+      setIsOpen(false);
+      await executeAction();
+    } else {
+      await executeAction();
+    }
+  }, [requireConfirmation]);
+
+  const executeAction = React.useCallback(async () => {
+    startTransition(async () => {
+      try {
+        const result = await onClick(data.map((item) => item.id));
+
+        if (result.error) {
+          toast.error(result.error);
+          onError?.(result.error, data);
+          return;
+        }
+
+        const successMsg = result.message || messages.successMessage;
+        toast.success(successMsg);
+        onSuccess?.(data);
+
+        if (requireConfirmation) {
+          props.onOpenChange?.(false);
+        }
+      } catch (error) {
+        const errorMsg =
+          error instanceof Error ? error.message : messages.errorMessage;
+        toast.error(errorMsg);
+        onError?.(errorMsg, data);
+      }
+    });
+  }, [
+    data,
+    onClick,
+    messages,
+    onSuccess,
+    onError,
+    props.onOpenChange,
+    requireConfirmation,
+  ]);
+
+  // Handle direct action without confirmation
+  const handleDirectAction = React.useCallback(async () => {
+    if (requireConfirmation) {
+      setIsOpen(true);
+    } else {
+      await executeAction();
+    }
+  }, [requireConfirmation, executeAction]);
+
+  const IconComponent = actionConfig.icon;
+
+  const trigger = showTrigger ? (
+    <Button
+      variant={actionConfig.variant}
+      size="sm"
+      className={triggerClassName}
+      disabled={disabled || isPending || data.length === 0}
+      onClick={requireConfirmation ? undefined : handleDirectAction}
+    >
+      {isPending ? (
+        <Loader className="mr-2 size-4 animate-spin" />
+      ) : (
+        <IconComponent className="mr-2 size-4" />
+      )}
+      {actionConfig.label} ({data.length})
+    </Button>
+  ) : null;
+
+  const dialogContent = (
+    <>
+      <DialogHeader>
+        <DialogTitle>{messages.confirmationTitle}</DialogTitle>
+        <DialogDescription className="text-left">
+          {messages.confirmationDescription}
+        </DialogDescription>
+      </DialogHeader>
+      <DialogFooter className="gap-2 sm:space-x-0">
+        <DialogClose asChild>
+          <Button variant="outline" disabled={isPending}>
+            Cancel
+          </Button>
+        </DialogClose>
+        <Button
+          variant={actionConfig.variant}
+          onClick={handleAction}
+          disabled={isPending}
+        >
+          {isPending && <Loader className="mr-2 size-4 animate-spin" />}
+          {actionConfig.label}
+        </Button>
+      </DialogFooter>
+    </>
+  );
+
+  const drawerContent = (
+    <>
+      <DrawerHeader>
+        <DrawerTitle>{messages.confirmationTitle}</DrawerTitle>
+        <DrawerDescription className="text-left">
+          {messages.confirmationDescription}
+        </DrawerDescription>
+      </DrawerHeader>
+      <DrawerFooter className="gap-2">
+        <Button
+          variant={actionConfig.variant}
+          onClick={handleAction}
+          disabled={isPending}
+        >
+          {isPending && <Loader className="mr-2 size-4 animate-spin" />}
+          {actionConfig.label}
+        </Button>
+        <DrawerClose asChild>
+          <Button variant="outline" disabled={isPending}>
+            Cancel
+          </Button>
+        </DrawerClose>
+      </DrawerFooter>
+    </>
+  );
+
+  if (!requireConfirmation && showTrigger) {
+    return trigger;
+  }
+
+  if (isDesktop) {
+    return (
+      <Dialog open={isOpen} onOpenChange={setIsOpen} {...props}>
+        {showTrigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
+        <DialogContent>{dialogContent}</DialogContent>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Drawer open={isOpen} onOpenChange={setIsOpen} {...props}>
+      {showTrigger && <DrawerTrigger asChild>{trigger}</DrawerTrigger>}
+      <DrawerContent>{drawerContent}</DrawerContent>
+    </Drawer>
+  );
+}
+
+// Export types for external use
+export type { ActionType, ActionConfig, GenericActionDialogProps };
+
+// Export predefined action configs for customization
+export { DEFAULT_ACTION_CONFIGS };
+
+// Utility function to create custom action configs
+export function createActionConfig(
+  type: ActionType,
+  overrides: Partial<Omit<ActionConfig, 'type'>>
+): ActionConfig {
+  return {
+    type,
+    ...DEFAULT_ACTION_CONFIGS[type],
+    ...overrides,
+  };
+}
+
+
+--------------
+
+type ActionType =
+  | 'delete'
+  | 'edit'
+  | 'archive'
+  | 'restore'
+  | 'ban'
+  | 'unban'
+  | 'deactivate'
+  | 'activate';
+
+interface ActionConfig {
+  type: ActionType;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  variant:
+    | 'default'
+    | 'destructive'
+    | 'outline'
+    | 'secondary'
+    | 'ghost'
+    | 'link';
+  confirmationTitle: string;
+  confirmationDescription: string;
+  successMessage: string;
+  loadingMessage?: string;
+}
+
+const DEFAULT_ACTION_CONFIGS: Record<ActionType, Omit<ActionConfig, 'type'>> = {
+  delete: {
+    label: 'Delete',
+    icon: Trash,
+    variant: 'destructive',
+    confirmationTitle: 'Delete Items',
+    confirmationDescription:
+      'This action cannot be undone. This will permanently delete the selected items from our servers.',
+    successMessage: 'Items deleted successfully',
+    loadingMessage: 'Deleting items...',
+  },
+  edit: {
+    label: 'Edit',
+    icon: Edit,
+    variant: 'outline',
+    confirmationTitle: 'Edit Items',
+    confirmationDescription:
+      'This will apply the selected changes to all selected items.',
+    successMessage: 'Items updated successfully',
+    loadingMessage: 'Updating items...',
+  },
+  archive: {
+    label: 'Archive',
+    icon: Archive,
+    variant: 'outline',
+    confirmationTitle: 'Archive Items',
+    confirmationDescription:
+      'This will move the selected items to your archive. You can restore them later.',
+    successMessage: 'Items archived successfully',
+  },
+  restore: {
+    label: 'Restore',
+    icon: Archive,
+    variant: 'outline',
+    confirmationTitle: 'Restore Items',
+    confirmationDescription:
+      'This will restore the selected items from your archive.',
+    successMessage: 'Items restored successfully',
+  },
+  ban: {
+    label: 'Ban',
+    icon: Ban,
+    variant: 'destructive',
+    confirmationTitle: 'Ban Users',
+    confirmationDescription:
+      'This will ban the selected users from accessing the platform.',
+    successMessage: 'Users banned successfully',
+  },
+  unban: {
+    label: 'Unban',
+    icon: UserX,
+    variant: 'outline',
+    confirmationTitle: 'Unban Users',
+    confirmationDescription: 'This will restore access for the selected users.',
+    successMessage: 'Users unbanned successfully',
+  },
+  deactivate: {
+    label: 'Deactivate',
+    icon: UserX,
+    variant: 'outline',
+    confirmationTitle: 'Deactivate Items',
+    confirmationDescription:
+      'This will temporarily deactivate the selected items.',
+    successMessage: 'Items deactivated successfully',
+  },
+  activate: {
+    label: 'Activate',
+    icon: UserX,
+    variant: 'outline',
+    confirmationTitle: 'Activate Items',
+    confirmationDescription: 'This will activate the selected items.',
+    successMessage: 'Items activated successfully',
+  },
+};
+
+interface GenericActionDialogProps<TData>
+  extends React.ComponentPropsWithoutRef<typeof Dialog> {
+  data: TData[];
+  itemName: string; // "task", "user", "product"
+  action: ActionType | ActionConfig;
+  onClick: (ids: string[]) => Promise<{ error?: string; message?: string }>;
+  showTrigger?: boolean;
+  triggerClassName?: string;
+  onSuccess?: (data: TData[]) => void;
+  onError?: (error: string, data: TData[]) => void;
+  disabled?: boolean;
+  requireConfirmation?: boolean;
+  customMessages?: {
+    confirmationTitle?: string;
+    confirmationDescription?: string;
+    successMessage?: string;
+    errorMessage?: string;
+  };
+}
+export function GenericActionDialog<
+  TData extends { id: string; name?: string | null; title?: string | null },
+>({
+  data,
+  itemName,
+  action,
+  onClick,
+  showTrigger = true,
+  triggerClassName,
+  onSuccess,
+  onError,
+  disabled = false,
+  requireConfirmation = true,
+  customMessages,
+  ...props
+}: GenericActionDialogProps<TData>) {
+  const [isPending, startTransition] = React.useTransition();
+  const [isOpen, setIsOpen] = React.useState(false);
+  const isDesktop = useMediaQuery('(min-width: 640px)');
+
+  // Get action configuration
+  const actionConfig: ActionConfig = React.useMemo(() => {
+    if (typeof action === 'string') {
+      return { type: action, ...DEFAULT_ACTION_CONFIGS[action] };
+    }
+    return action;
+  }, [action]);
+
+  // Generate contextual messages
+  const messages = React.useMemo(() => {
+    const itemCount = data.length;
+    const itemText = itemCount === 1 ? itemName : `${itemName}s`;
+    const itemNames =
+      data.length <= 3
+        ? data
+            .map((item) => item.name || item.title || `${itemName} ${item.id}`)
+            .join(', ')
+        : `${itemCount} ${itemText}`;
+
+    return {
+      confirmationTitle:
+        customMessages?.confirmationTitle ||
+        `${actionConfig.confirmationTitle} (${itemCount})`,
+      confirmationDescription:
+        customMessages?.confirmationDescription ||
+        `${actionConfig.confirmationDescription} You are about to ${actionConfig.label.toLowerCase()} ${itemNames}.`,
+      successMessage:
+        customMessages?.successMessage ||
+        `${itemCount} ${itemText} ${actionConfig.label.toLowerCase()}${actionConfig.type === 'delete' ? 'd' : actionConfig.type === 'edit' ? 'ed' : 'd'} successfully`,
+      errorMessage:
+        customMessages?.errorMessage ||
+        `Failed to ${actionConfig.label.toLowerCase()} ${itemText}`,
+    };
+  }, [data, itemName, actionConfig, customMessages]);
+
+  const handleAction = React.useCallback(async () => {
+    if (requireConfirmation) {
+      setIsOpen(false);
+      await executeAction();
+    } else {
+      await executeAction();
+    }
+  }, [requireConfirmation]);
+
+  const executeAction = React.useCallback(async () => {
+    startTransition(async () => {
+      try {
+        const result = await onClick(data.map((item) => item.id));
+
+        if (result.error) {
+          toast.error(result.error);
+          onError?.(result.error, data);
+          return;
+        }
+
+        const successMsg = result.message || messages.successMessage;
+        toast.success(successMsg);
+        onSuccess?.(data);
+
+        if (requireConfirmation) {
+          props.onOpenChange?.(false);
+        }
+      } catch (error) {
+        const errorMsg =
+          error instanceof Error ? error.message : messages.errorMessage;
+        toast.error(errorMsg);
+        onError?.(errorMsg, data);
+      }
+    });
+  }, [
+    data,
+    onClick,
+    messages,
+    onSuccess,
+    onError,
+    props.onOpenChange,
+    requireConfirmation,
+  ]);
+
+  // Handle direct action without confirmation
+  const handleDirectAction = React.useCallback(async () => {
+    if (requireConfirmation) {
+      setIsOpen(true);
+    } else {
+      await executeAction();
+    }
+  }, [requireConfirmation, executeAction]);
+
+  const IconComponent = actionConfig.icon;
+
+  const trigger = showTrigger ? (
+    <Button
+      variant={actionConfig.variant}
+      size="sm"
+      className={triggerClassName}
+      disabled={disabled || isPending || data.length === 0}
+      onClick={requireConfirmation ? undefined : handleDirectAction}
+    >
+      {isPending ? (
+        <Loader className="mr-2 size-4 animate-spin" />
+      ) : (
+        <IconComponent className="mr-2 size-4" />
+      )}
+      {actionConfig.label} ({data.length})
+    </Button>
+  ) : null;
+
+  const dialogContent = (
+    <>
+      <DialogHeader>
+        <DialogTitle>{messages.confirmationTitle}</DialogTitle>
+        <DialogDescription className="text-left">
+          {messages.confirmationDescription}
+        </DialogDescription>
+      </DialogHeader>
+      <DialogFooter className="gap-2 sm:space-x-0">
+        <DialogClose asChild>
+          <Button variant="outline" disabled={isPending}>
+            Cancel
+          </Button>
+        </DialogClose>
+        <Button
+          variant={actionConfig.variant}
+          onClick={handleAction}
+          disabled={isPending}
+        >
+          {isPending && <Loader className="mr-2 size-4 animate-spin" />}
+          {actionConfig.label}
+        </Button>
+      </DialogFooter>
+    </>
+  );
+
+  const drawerContent = (
+    <>
+      <DrawerHeader>
+        <DrawerTitle>{messages.confirmationTitle}</DrawerTitle>
+        <DrawerDescription className="text-left">
+          {messages.confirmationDescription}
+        </DrawerDescription>
+      </DrawerHeader>
+      <DrawerFooter className="gap-2">
+        <Button
+          variant={actionConfig.variant}
+          onClick={handleAction}
+          disabled={isPending}
+        >
+          {isPending && <Loader className="mr-2 size-4 animate-spin" />}
+          {actionConfig.label}
+        </Button>
+        <DrawerClose asChild>
+          <Button variant="outline" disabled={isPending}>
+            Cancel
+          </Button>
+        </DrawerClose>
+      </DrawerFooter>
+    </>
+  );
+
+  if (!requireConfirmation && showTrigger) {
+    return trigger;
+  }
+
+  if (isDesktop) {
+    return (
+      <Dialog open={isOpen} onOpenChange={setIsOpen} {...props}>
+        {showTrigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
+        <DialogContent>{dialogContent}</DialogContent>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Drawer open={isOpen} onOpenChange={setIsOpen} {...props}>
+      {showTrigger && <DrawerTrigger asChild>{trigger}</DrawerTrigger>}
+      <DrawerContent>{drawerContent}</DrawerContent>
+    </Drawer>
+  );
+}
+
+// Export types for external use
+export type { ActionType, ActionConfig, GenericActionDialogProps };
+
+// Export predefined action configs for customization
+export { DEFAULT_ACTION_CONFIGS };
+
+// Utility function to create custom action configs
+export function createActionConfig(
+  type: ActionType,
+  overrides: Partial<Omit<ActionConfig, 'type'>>
+): ActionConfig {
+  return {
+    type,
+    ...DEFAULT_ACTION_CONFIGS[type],
+    ...overrides,
+  };
+}
+
+
+
+---------------
+@repo/ui/components/FormSheet/index.tsx
+'use client';
+
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as React from 'react';
+import {
+  type DefaultValues,
+  type FieldValues,
+  type SubmitHandler,
+  type UseFormReturn,
+  useForm,
+} from 'react-hook-form';
+import { toast } from 'sonner';
+import type { z } from 'zod';
+
+import { FlexibleSheet } from './flexible-sheet';
+
+interface GenericFormSheetProps<T extends FieldValues> {
+  // Sheet control props
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+
+  // Form configuration
+  schema: z.ZodType<T>;
+  onSubmit: (data: T) => Promise<{ error?: string }>;
+  defaultValues?: DefaultValues<T>;
+
+  // A render prop to inject the form fields
+  renderForm: (form: UseFormReturn<T>) => React.ReactNode;
+
+  // UI Text and configuration
+  uiText: {
+    title: string;
+    description: string;
+    submitButton: string;
+  };
+  onSuccess?: () => void;
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+  trigger?: React.ReactNode;
+}
+
+export function GenericFormSheet<T extends FieldValues>({
+  open,
+  onOpenChange,
+  schema,
+  onSubmit,
+  defaultValues,
+  renderForm,
+  uiText,
+  onSuccess,
+  size = 'md',
+  trigger,
+}: GenericFormSheetProps<T>) {
+  const [isPending, startTransition] = React.useTransition();
+
+  const form = useForm<T>({
+    resolver: zodResolver(schema),
+    defaultValues,
+  });
+
+  // Reset the form with new defaultValues when the sheet is opened or data changes
+  React.useEffect(() => {
+    if (open && defaultValues) {
+      form.reset(defaultValues);
+    }
+  }, [open, defaultValues, form]);
+
+  const handleFormSubmit: SubmitHandler<T> = (data) => {
+    startTransition(async () => {
+      const { error } = await onSubmit(data);
+
+      if (error) {
+        toast.error(error);
+        return;
+      }
+
+      toast.success(`${uiText.title} successfully!`);
+      onOpenChange(false);
+      onSuccess?.();
+    });
+  };
+
+  return (
+    <FlexibleSheet
+      open={open}
+      trigger={trigger}
+      onOpenChange={onOpenChange}
+      title={uiText.title}
+      description={uiText.description}
+      size={size}
+      contentClassName="p-4"
+      actions={[
+        {
+          label: 'Cancel',
+          variant: 'outline',
+          onClick: () => onOpenChange(false),
+        },
+        {
+          label: uiText.submitButton,
+          onClick: () => form.handleSubmit(handleFormSubmit)(),
+          disabled: isPending,
+          loading: isPending,
+        },
+      ]}
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          form.handleSubmit(handleFormSubmit)();
+        }}
+      >
+        {renderForm(form)}
+      </form>
+    </FlexibleSheet>
+  );
+}
+
+
+------------
+a common example is in another app 
+"use client";
+
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
+import * as React from "react";
+import { createTask } from "../_lib/actions";
+import { createTaskSchema } from "../_lib/validations";
+import { GenericFormSheet } from "./sub/form-sheet";
+import { TaskForm } from "./task-form";
+
+export function CreateTaskSheet() {
+  const [open, setOpen] = React.useState(false);
+
+  const trigger = (
+    <Button variant="outline" size="sm">
+      <Plus className="mr-2 h-4 w-4" />
+      New task
+    </Button>
+  );
+
+  return (
+    <GenericFormSheet
+      open={open}
+      onOpenChange={setOpen}
+      trigger={trigger} // <-- This will now work perfectly
+      schema={createTaskSchema}
+      onSubmit={createTask}
+      defaultValues={{
+        title: "",
+        label: "bug",
+        status: "todo",
+        priority: "low",
+        estimatedHours: 0,
+      }}
+      uiText={{
+        title: "Create Task",
+        description: "Fill in the details below to create a new task.",
+        submitButton: "Create Task",
+      }}
+      renderForm={(form) => <TaskForm form={form} />}
+    />
+  );
+}
+
+----
+"use client";
+
+import type { Task } from "@/db/schema";
+import type { Row } from "@tanstack/react-table";
+import type * as React from "react";
+
+
+import type { Dialog } from "@/components/ui/dialog";
+import { deleteTasks } from "../_lib/actions";
+import { GenericActionDialog } from "./sub/action-dialog";
+
+interface DeleteTasksDialogProps
+  extends React.ComponentPropsWithoutRef<typeof Dialog> {
+  data: Row<(Task)>["original"][];
+  showTrigger?: boolean;
+  onSuccess?: () => void;
+}
+
+export function DeleteTasksDialog({
+  data,
+  showTrigger = true,
+  ...props
+}: DeleteTasksDialogProps) {
+
+  return <GenericActionDialog
+    {...props}
+    action={"delete"}
+    data={data}
+    itemName="Task"
+    onClick={(ids) => {
+      return deleteTasks({ ids })
+    }}
+  />
+}
+
+
+------
+"use client";
+
+import { tasks } from "@/db/schema";
+import type { FieldPath, FieldValues, UseFormReturn } from "react-hook-form";
+
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils"; // Assuming you have a cn utility for classnames
+
+interface TaskFormProps<T extends FieldValues> {
+  form: UseFormReturn<T>;
+  className?: string;
+}
+
+export function TaskForm<T extends FieldValues>({
+  form,
+  className,
+}: TaskFormProps<T>) {
+  return (
+    <Form {...form}>
+      <div className={cn("flex flex-col gap-4", className)}>
+        <FormField
+          control={form.control}
+          name={"title" as FieldPath<T>}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Title</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="Do a kickflip"
+                  className="resize-none"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FormField
+            control={form.control}
+            name={"status" as FieldPath<T>}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Status</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger className="capitalize">
+                      <SelectValue placeholder="Select a status" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectGroup>
+                      {tasks.status.enumValues.map((item) => (
+                        <SelectItem
+                          key={item}
+                          value={item}
+                          className="capitalize"
+                        >
+                          {item}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name={"priority" as FieldPath<T>}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Priority</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger className="capitalize">
+                      <SelectValue placeholder="Select a priority" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectGroup>
+                      {tasks.priority.enumValues.map((item) => (
+                        <SelectItem
+                          key={item}
+                          value={item}
+                          className="capitalize"
+                        >
+                          {item}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FormField
+            control={form.control}
+            name={"label" as FieldPath<T>}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Label</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger className="capitalize">
+                      <SelectValue placeholder="Select a label" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectGroup>
+                      {tasks.label.enumValues.map((item) => (
+                        <SelectItem
+                          key={item}
+                          value={item}
+                          className="capitalize"
+                        >
+                          {item}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name={"estimatedHours" as FieldPath<T>}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Estimated Hours</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="Enter hours"
+                    step="0.5"
+                    min="0"
+                    {...field}
+                    onChange={(event) =>
+                      // Ensure value is registered as a number
+                      field.onChange(
+                        event.target.value === ""
+                          ? null
+                          : event.target.valueAsNumber,
+                      )
+                    }
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      </div>
+    </Form>
+  );
+}
+
+-----
+"use client";
+
+import { type Task, tasks } from "@/db/schema";
+import { SelectTrigger } from "@radix-ui/react-select";
+import type { Table } from "@tanstack/react-table";
+import { ArrowUp, CheckCircle2, Download, Trash2 } from "lucide-react";
+import * as React from "react";
+import { toast } from "sonner";
+
+import {
+  DataTableActionBar,
+  DataTableActionBarAction,
+  DataTableActionBarSelection,
+} from "@/components/data-table-action-bar";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { exportTableToCSV } from "@/lib/export";
+import { deleteTasks, updateTasks } from "../_lib/actions";
+
+const actions = [
+  "update-status",
+  "update-priority",
+  "export",
+  "delete",
+] as const;
+
+type Action = (typeof actions)[number];
+
+interface TasksTableActionBarProps {
+  table: Table<Task>;
+}
+
+export function TasksTableActionBar({ table }: TasksTableActionBarProps) {
+  const rows = table.getFilteredSelectedRowModel().rows;
+  const [isPending, startTransition] = React.useTransition();
+  const [currentAction, setCurrentAction] = React.useState<Action | null>(null);
+
+  const getIsActionPending = React.useCallback(
+    (action: Action) => isPending && currentAction === action,
+    [isPending, currentAction],
+  );
+
+  const onTaskUpdate = React.useCallback(
+    ({
+      field,
+      value,
+    }: {
+      field: "status" | "priority";
+      value: Task["status"] | Task["priority"];
+    }) => {
+      setCurrentAction(
+        field === "status" ? "update-status" : "update-priority",
+      );
+      startTransition(async () => {
+        const { error } = await updateTasks({
+          ids: rows.map((row) => row.original.id),
+          [field]: value,
+        });
+
+        if (error) {
+          toast.error(error);
+          return;
+        }
+        toast.success("Tasks updated");
+      });
+    },
+    [rows],
+  );
+
+  const onTaskExport = React.useCallback(() => {
+    setCurrentAction("export");
+    startTransition(() => {
+      exportTableToCSV(table, {
+        excludeColumns: ["select", "actions"],
+        onlySelected: true,
+      });
+    });
+  }, [table]);
+
+  const onTaskDelete = React.useCallback(() => {
+    setCurrentAction("delete");
+    startTransition(async () => {
+      const { error } = await deleteTasks({
+        ids: rows.map((row) => row.original.id),
+      });
+
+      if (error) {
+        toast.error(error);
+        return;
+      }
+      table.toggleAllRowsSelected(false);
+    });
+  }, [rows, table]);
+
+  return (
+    <DataTableActionBar table={table} visible={rows.length > 0}>
+      <DataTableActionBarSelection table={table} />
+      <Separator
+        orientation="vertical"
+        className="hidden data-[orientation=vertical]:h-5 sm:block"
+      />
+      <div className="flex items-center gap-1.5">
+        <Select
+          onValueChange={(value: Task["status"]) =>
+            onTaskUpdate({ field: "status", value })
+          }
+        >
+          <SelectTrigger asChild>
+            <DataTableActionBarAction
+              // this component internally handles the tooltips , isLoading and Loader Icon show etc 
+              size="icon"
+              tooltip="Update status"
+              isPending={getIsActionPending("update-status")}
+            >
+              <CheckCircle2 />
+            </DataTableActionBarAction>
+          </SelectTrigger>
+          <SelectContent align="center">
+            <SelectGroup>
+              {tasks.status.enumValues.map((status) => (
+                <SelectItem key={status} value={status} className="capitalize">
+                  {status}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <Select
+          onValueChange={(value: Task["priority"]) =>
+            onTaskUpdate({ field: "priority", value })
+          }
+        >
+          <SelectTrigger asChild>
+            <DataTableActionBarAction
+              size="icon"
+              tooltip="Update priority"
+              isPending={getIsActionPending("update-priority")}
+            >
+              <ArrowUp />
+            </DataTableActionBarAction>
+          </SelectTrigger>
+          <SelectContent align="center">
+            <SelectGroup>
+              {tasks.priority.enumValues.map((priority) => (
+                <SelectItem
+                  key={priority}
+                  value={priority}
+                  className="capitalize"
+                >
+                  {priority}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <DataTableActionBarAction
+          size="icon"
+          tooltip="Export tasks"
+          isPending={getIsActionPending("export")}
+          onClick={onTaskExport}
+        >
+          <Download />
+        </DataTableActionBarAction>
+        <DataTableActionBarAction
+          size="icon"
+          tooltip="Delete tasks"
+          isPending={getIsActionPending("delete")}
+          onClick={onTaskDelete}
+        >
+          <Trash2 />
+        </DataTableActionBarAction>
+      </div>
+    </DataTableActionBar>
+  );
+}
+
+
+------
+
+"use client";
+
+import { type Task, tasks } from "@/db/schema";
+import type { DataTableRowAction } from "@/types/data-table";
+import type { ColumnDef } from "@tanstack/react-table";
+import {
+  ArrowUpDown,
+  CalendarIcon,
+  CircleDashed,
+  Clock,
+  Ellipsis,
+  Text,
+} from "lucide-react";
+import * as React from "react";
+import { toast } from "sonner";
+
+import { DataTableColumnHeader } from "@/components/data-table-column-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { formatDate } from "@/lib/format";
+import { getErrorMessage } from "@/lib/handle-error";
+
+import { updateTask } from "../_lib/actions";
+import { getPriorityIcon, getStatusIcon } from "../_lib/utils";
+
+interface GetTasksTableColumnsProps {
+  statusCounts: Record<Task["status"], number>;
+  priorityCounts: Record<Task["priority"], number>;
+  estimatedHoursRange: { min: number; max: number };
+  setRowAction: (value: DataTableRowAction<Task> | null) => void;
+
+}
+
+export function getTasksTableColumns({
+  statusCounts,
+  priorityCounts,
+  estimatedHoursRange,
+  setRowAction,
+}: GetTasksTableColumnsProps): ColumnDef<Task>[] {
+  return [
+    {
+      id: "select",
+      header: ({ table }) => (
+        <Checkbox
+          checked={
+            table.getIsAllPageRowsSelected() ||
+            (table.getIsSomePageRowsSelected() && "indeterminate")
+          }
+          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+          aria-label="Select all"
+          className="translate-y-0.5"
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(value) => row.toggleSelected(!!value)}
+          aria-label="Select row"
+          className="translate-y-0.5"
+        />
+      ),
+      enableSorting: false,
+      enableHiding: false,
+      size: 40,
+    },
+    {
+      id: "code",
+      accessorKey: "code",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Task" />
+      ),
+      cell: ({ row }) => <div className="w-20">{row.getValue("code")}</div>,
+      enableSorting: false,
+      enableHiding: false,
+    },
+    {
+      id: "title",
+      accessorKey: "title",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Title" />
+      ),
+      cell: ({ row }) => {
+        const label = tasks.label.enumValues.find(
+          (label) => label === row.original.label,
+        );
+
+        return (
+          <div className="flex items-center gap-2">
+            {label && <Badge variant="outline">{label}</Badge>}
+            <span className="max-w-[31.25rem] truncate font-medium">
+              {row.getValue("title")}
+            </span>
+          </div>
+        );
+      },
+      meta: {
+        label: "Title",
+        placeholder: "Search titles...",
+        variant: "text",
+        icon: Text,
+      },
+      enableColumnFilter: true,
+    },
+    {
+      id: "status",
+      accessorKey: "status",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Status" />
+      ),
+      cell: ({ cell }) => {
+        const status = tasks.status.enumValues.find(
+          (status) => status === cell.getValue<Task["status"]>(),
+        );
+
+        if (!status) return null;
+
+        const Icon = getStatusIcon(status);
+
+        return (
+          <Badge variant="outline" className="py-1 [&>svg]:size-3.5">
+            <Icon />
+            <span className="capitalize">{status}</span>
+          </Badge>
+        );
+      },
+      meta: {
+        label: "Status",
+        variant: "multiSelect",
+        options: tasks.status.enumValues.map((status) => ({
+          label: status.charAt(0).toUpperCase() + status.slice(1),
+          value: status,
+          count: statusCounts[status],
+          icon: getStatusIcon(status),
+        })),
+        icon: CircleDashed,
+      },
+      enableColumnFilter: true,
+    },
+    {
+      id: "priority",
+      accessorKey: "priority",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Priority" />
+      ),
+      cell: ({ cell }) => {
+        const priority = tasks.priority.enumValues.find(
+          (priority) => priority === cell.getValue<Task["priority"]>(),
+        );
+
+        if (!priority) return null;
+
+        const Icon = getPriorityIcon(priority);
+
+        return (
+          <Badge variant="outline" className="py-1 [&>svg]:size-3.5">
+            <Icon />
+            <span className="capitalize">{priority}</span>
+          </Badge>
+        );
+      },
+      meta: {
+        label: "Priority",
+        variant: "multiSelect",
+        options: tasks.priority.enumValues.map((priority) => ({
+          label: priority.charAt(0).toUpperCase() + priority.slice(1),
+          value: priority,
+          count: priorityCounts[priority],
+          icon: getPriorityIcon(priority),
+        })),
+        icon: ArrowUpDown,
+      },
+      enableColumnFilter: true,
+    },
+    {
+      id: "estimatedHours",
+      accessorKey: "estimatedHours",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Est. Hours" />
+      ),
+      cell: ({ cell }) => {
+        const estimatedHours = cell.getValue<number>();
+        return <div className="w-20 text-right">{estimatedHours}</div>;
+      },
+      meta: {
+        label: "Est. Hours",
+        variant: "range",
+        range: [estimatedHoursRange.min, estimatedHoursRange.max],
+        unit: "hr",
+        icon: Clock,
+      },
+      enableColumnFilter: true,
+    },
+    {
+      id: "createdAt",
+      accessorKey: "createdAt",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Created At" />
+      ),
+      cell: ({ cell }) => formatDate(cell.getValue<Date>()),
+      meta: {
+        label: "Created At",
+        variant: "dateRange",
+        icon: CalendarIcon,
+      },
+      enableColumnFilter: true,
+    },
+    {
+      id: "actions",
+      cell: function Cell({ row }) {
+        const [isUpdatePending, startUpdateTransition] = React.useTransition();
+
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                aria-label="Open menu"
+                variant="ghost"
+                className="flex size-8 p-0 data-[state=open]:bg-muted"
+              >
+                <Ellipsis className="size-4" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem
+                onSelect={() => setRowAction({ row, variant: "update" })}
+              >
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>Labels</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuRadioGroup
+                    value={row.original.label}
+                    onValueChange={(value) => {
+                      startUpdateTransition(() => {
+                        toast.promise(
+                          updateTask({
+                            id: row.original.id,
+                            label: value as Task["label"],
+                          }),
+                          {
+                            loading: "Updating...",
+                            success: "Label updated",
+                            error: (err) => getErrorMessage(err),
+                          },
+                        );
+                      });
+                    }}
+                  >
+                    {tasks.label.enumValues.map((label) => (
+                      <DropdownMenuRadioItem
+                        key={label}
+                        value={label}
+                        className="capitalize"
+                        disabled={isUpdatePending}
+                      >
+                        {label}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => setRowAction({ row, variant: "delete" })}
+              >
+                Delete
+                <DropdownMenuShortcut>⌘⌫</DropdownMenuShortcut>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      },
+      size: 40,
+    },
+  ];
+}
+
+
+
+------
+"use client";
+
+import type { Task } from "@/db/schema";
+import * as React from "react";
+
+import { DeleteTasksDialog } from "./delete-tasks-dialog";
+import { AdvancedDataTable, createMultiAction, createSingleAction } from "./table-layout";
+import { TasksTableActionBar } from "./tasks-table-action-bar";
+import { getTasksTableColumns } from "./tasks-table-columns";
+import { UpdateTaskSheet } from "./update-task-sheet";
+
+// Define the structure of the metadata needed for the task table
+interface TaskFilterMetadata {
+  statusCounts: Record<Task["status"], number>;
+  priorityCounts: Record<Task["priority"], number>;
+  estimatedHoursRange: { min: number; max: number };
+}
+
+interface TasksTableProps {
+  data: {
+    data: Task[];
+    pageCount: number;
+  };
+  statusCounts: Record<Task["status"], number>;
+  priorityCounts: Record<Task["priority"], number>;
+  estimatedHoursRange: { min: number; max: number };
+}
+type TasksTableActions = "update" | "delete"
+export function TasksTable({
+  data,
+  statusCounts,
+  priorityCounts,
+  estimatedHoursRange,
+}: TasksTableProps) {
+
+  // Organize filter metadata into a structured object
+  const filterMetadata: TaskFilterMetadata = {
+    statusCounts,
+    priorityCounts,
+    estimatedHoursRange,
+  };
+
+
+  return (
+    <AdvancedDataTable<Task, TasksTableActions, TaskFilterMetadata>
+      tableData={data}
+      filterMetadata={filterMetadata}
+      getColumns={(metadata, setRowAction) =>
+        getTasksTableColumns({
+          statusCounts: metadata.statusCounts,
+          priorityCounts: metadata.priorityCounts,
+          estimatedHoursRange: metadata.estimatedHoursRange,
+          setRowAction,
+        })
+      }
+      getRowId={(task) => task.id}
+      initialSorting={[{ id: "createdAt", desc: true }]}
+      ActionBar={TasksTableActionBar}
+      shallow={false}
+      clearOnDefault={true}
+      actions={{
+        update: createSingleAction(UpdateTaskSheet),
+        delete: createMultiAction(DeleteTasksDialog)
+      }}
+    />
+  );
+}
+
+
+----------------
+"use client";
+
+import type { Task } from "@/db/schema";
+import * as React from "react";
+import { updateTask } from "../_lib/actions";
+import { type UpdateTaskSchema, updateTaskSchema } from "../_lib/validations";
+import { GenericFormSheet } from "./sub/form-sheet";
+import { TaskForm } from "./task-form"; // Your form fields component is still needed
+
+interface UpdateTaskSheetProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  data: Task | null;
+  onSuccess?: () => void;
+}
+
+export function UpdateTaskSheet({ data, ...props }: UpdateTaskSheetProps) {
+  if (!data) return null;
+  const defaultValues = {
+    title: data.title ?? "",
+    label: data.label ?? "bug",
+    status: data.status ?? "todo",
+    priority: data.priority ?? "low",
+    estimatedHours: data.estimatedHours ?? 0,
+  } as Partial<UpdateTaskSchema>;
+  return (
+    <GenericFormSheet
+      {...props} // Passes open, onOpenChange, onSuccess
+      schema={updateTaskSchema}
+      onSubmit={async (input) => {
+        const res = await updateTask({ id: data.id, ...input });
+        return {
+          error: res.error,
+          success: !res.error,
+
+        }
+      }}
+      defaultValues={defaultValues}
+      uiText={{
+        title: "Update Task",
+        description: "Update the task details and save the changes.",
+        submitButton: "Save Changes",
+      }}
+      renderForm={(form) => <TaskForm form={form} />}
+    />
+  );
+}
+
+
+----------------
+
+validations and server related 
+import { type Task, tasks } from "@/db/schema";
+import {
+  createSearchParamsCache,
+  parseAsArrayOf,
+  parseAsInteger,
+  parseAsString,
+  parseAsStringEnum,
+} from "nuqs/server";
+import * as z from "zod";
+
+import { tableFilterModeConfig } from "@/config/flag";
+import { getFiltersStateParser, getSortingStateParser } from "@/lib/parsers";
+
+export const searchParamsCache = createSearchParamsCache({
+  filterFlag: parseAsStringEnum(
+    tableFilterModeConfig.modes.map((flag) => flag.value)
+  ),
+  page: parseAsInteger.withDefault(1),
+  perPage: parseAsInteger.withDefault(10),
+  sort: getSortingStateParser<Task>().withDefault([
+    { id: "createdAt", desc: true },
+  ]),
+  title: parseAsString.withDefault(""),
+  // advanced filter
+  filters: getFiltersStateParser().withDefault([]),
+  joinOperator: parseAsStringEnum(["and", "or"]).withDefault("and"),
+
+  status: parseAsArrayOf(z.enum(tasks.status.enumValues)).withDefault([]),
+  priority: parseAsArrayOf(z.enum(tasks.priority.enumValues)).withDefault([]),
+  estimatedHours: parseAsArrayOf(z.coerce.number()).withDefault([]),
+  createdAt: parseAsArrayOf(z.coerce.number()).withDefault([]),
+});
+
+export const createTaskSchema = z.object({
+  title: z.string(),
+  label: z.enum(tasks.label.enumValues),
+  status: z.enum(tasks.status.enumValues),
+  priority: z.enum(tasks.priority.enumValues),
+  estimatedHours: z.coerce.number().optional(),
+});
+
+export const updateTaskSchema = z.object({
+  title: z.string().optional(),
+  label: z.enum(tasks.label.enumValues).optional(),
+  status: z.enum(tasks.status.enumValues).optional(),
+  priority: z.enum(tasks.priority.enumValues).optional(),
+  estimatedHours: z.coerce.number().optional(),
+});
+
+export type GetTasksSchema = Awaited<
+  ReturnType<typeof searchParamsCache.parse>
+>;
+export type CreateTaskSchema = z.infer<typeof createTaskSchema>;
+export type UpdateTaskSchema = z.infer<typeof updateTaskSchema>;
+
+
+------------
+our use case will be fetching it using trpc , but you could see how it works here 
+import "server-only";
+
+import { db } from "@/db";
+import { tasks } from "@/db/schema";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  gt,
+  gte,
+  ilike,
+  inArray,
+  lte,
+  sql,
+} from "drizzle-orm";
+
+import { filterColumns } from "@/lib/filter-columns";
+import { unstable_cache } from "@/lib/unstable-cache";
+// const unstable_cache = <T>(data: T) => data as T
+import type { GetTasksSchema } from "./validations";
+
+export async function getTasks(input: GetTasksSchema) {
+  return await unstable_cache(
+    async () => {
+      try {
+        const offset = (input.page - 1) * input.perPage;
+        const advancedTable =
+          input.filterFlag === "expert" || input.filterFlag === "command";
+
+        const advancedWhere = filterColumns({
+          table: tasks,
+          filters: input.filters,
+          joinOperator: input.joinOperator,
+        });
+
+        const where = advancedTable
+          ? advancedWhere
+          : and(
+              input.title ? ilike(tasks.title, `%${input.title}%`) : undefined,
+              input.status.length > 0
+                ? inArray(tasks.status, input.status)
+                : undefined,
+              input.priority.length > 0
+                ? inArray(tasks.priority, input.priority)
+                : undefined,
+              input.estimatedHours.length > 0
+                ? and(
+                    input.estimatedHours[0]
+                      ? gte(tasks.estimatedHours, input.estimatedHours[0])
+                      : undefined,
+                    input.estimatedHours[1]
+                      ? lte(tasks.estimatedHours, input.estimatedHours[1])
+                      : undefined
+                  )
+                : undefined,
+              input.createdAt.length > 0
+                ? and(
+                    input.createdAt[0]
+                      ? gte(
+                          tasks.createdAt,
+                          (() => {
+                            const date = new Date(input.createdAt[0]);
+                            date.setHours(0, 0, 0, 0);
+                            return date;
+                          })()
+                        )
+                      : undefined,
+                    input.createdAt[1]
+                      ? lte(
+                          tasks.createdAt,
+                          (() => {
+                            const date = new Date(input.createdAt[1]);
+                            date.setHours(23, 59, 59, 999);
+                            return date;
+                          })()
+                        )
+                      : undefined
+                  )
+                : undefined
+            );
+
+        const orderBy =
+          input.sort.length > 0
+            ? input.sort.map((item) =>
+                item.desc ? desc(tasks[item.id]) : asc(tasks[item.id])
+              )
+            : [asc(tasks.createdAt)];
+
+        const { data, total } = await db.transaction(async (tx) => {
+          const data = await tx
+            .select()
+            .from(tasks)
+            .limit(input.perPage)
+            .offset(offset)
+            .where(where)
+            .orderBy(...orderBy);
+
+          const total = await tx
+            .select({
+              count: count(),
+            })
+            .from(tasks)
+            .where(where)
+            .execute()
+            .then((res) => res[0]?.count ?? 0);
+
+          return {
+            data,
+            total,
+          };
+        });
+
+        const pageCount = Math.ceil(total / input.perPage);
+        return { data, pageCount };
+      } catch (_err) {
+        return { data: [], pageCount: 0 };
+      }
+    },
+    [JSON.stringify(input)],
+    {
+      revalidate: 1,
+      tags: ["tasks"],
+    }
+  )();
+}
+
+export async function getTaskStatusCounts() {
+  return unstable_cache(
+    async () => {
+      try {
+        return await db
+          .select({
+            status: tasks.status,
+            count: count(),
+          })
+          .from(tasks)
+          .groupBy(tasks.status)
+          .having(gt(count(tasks.status), 0))
+          .then((res) =>
+            res.reduce(
+              (acc, { status, count }) => {
+                acc[status] = count;
+                return acc;
+              },
+              {
+                todo: 0,
+                "in-progress": 0,
+                done: 0,
+                canceled: 0,
+              }
+            )
+          );
+      } catch (_err) {
+        return {
+          todo: 0,
+          "in-progress": 0,
+          done: 0,
+          canceled: 0,
+        };
+      }
+    },
+    ["task-status-counts"],
+    {
+      revalidate: 3600,
+    }
+  )();
+}
+
+export async function getTaskPriorityCounts() {
+  return unstable_cache(
+    async () => {
+      try {
+        return await db
+          .select({
+            priority: tasks.priority,
+            count: count(),
+          })
+          .from(tasks)
+          .groupBy(tasks.priority)
+          .having(gt(count(), 0))
+          .then((res) =>
+            res.reduce(
+              (acc, { priority, count }) => {
+                acc[priority] = count;
+                return acc;
+              },
+              {
+                low: 0,
+                medium: 0,
+                high: 0,
+              }
+            )
+          );
+      } catch (_err) {
+        return {
+          low: 0,
+          medium: 0,
+          high: 0,
+        };
+      }
+    },
+    ["task-priority-counts"],
+    {
+      revalidate: 3600,
+    }
+  )();
+}
+
+export async function getEstimatedHoursRange() {
+  return unstable_cache(
+    async () => {
+      try {
+        return await db
+          .select({
+            min: sql<number>`min(${tasks.estimatedHours})`,
+            max: sql<number>`max(${tasks.estimatedHours})`,
+          })
+          .from(tasks)
+          .then((res) => res[0] ?? { min: 0, max: 0 });
+      } catch (_err) {
+        return { min: 0, max: 0 };
+      }
+    },
+    ["estimated-hours-range"],
+    {
+      revalidate: 3600,
+    }
+  )();
+}
+
+
+from server actions it looks like this 
+while actions 
+"use server";
+
+import { db } from "@/db/index";
+import { type Task, tasks } from "@/db/schema";
+import { takeFirstOrThrow } from "@/db/utils";
+import { asc, eq, inArray, not } from "drizzle-orm";
+import { customAlphabet } from "nanoid";
+import { revalidateTag, unstable_noStore } from "next/cache";
+
+import { getErrorMessage } from "@/lib/handle-error";
+
+import { generateRandomTask } from "./utils";
+import type { CreateTaskSchema, UpdateTaskSchema } from "./validations";
+
+export async function seedTasks(input: { count: number }) {
+  const count = input.count ?? 100;
+
+  try {
+    const allTasks: Task[] = [];
+
+    for (let i = 0; i < count; i++) {
+      allTasks.push(generateRandomTask());
+    }
+
+    await db.delete(tasks);
+
+    console.log("📝 Inserting tasks", allTasks.length);
+
+    await db.insert(tasks).values(allTasks).onConflictDoNothing();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+export async function createTask(input: CreateTaskSchema) {
+  unstable_noStore();
+  try {
+    await db.transaction(async (tx) => {
+      const newTask = await tx
+        .insert(tasks)
+        .values({
+          code: `TASK-${customAlphabet("0123456789", 4)()}`,
+          title: input.title,
+          status: input.status,
+          label: input.label,
+          priority: input.priority,
+        })
+        .returning({
+          id: tasks.id,
+        })
+        .then(takeFirstOrThrow);
+
+      // Delete a task to keep the total number of tasks constant
+      await tx.delete(tasks).where(
+        eq(
+          tasks.id,
+          (
+            await tx
+              .select({
+                id: tasks.id,
+              })
+              .from(tasks)
+              .limit(1)
+              .where(not(eq(tasks.id, newTask.id)))
+              .orderBy(asc(tasks.createdAt))
+              .then(takeFirstOrThrow)
+          ).id
+        )
+      );
+    });
+
+    revalidateTag("tasks");
+    revalidateTag("task-status-counts");
+    revalidateTag("task-priority-counts");
+
+    return {
+      data: null,
+      error: undefined,
+    };
+  } catch (err) {
+    return {
+      data: null,
+      error: getErrorMessage(err),
+    };
+  }
+}
+
+export async function updateTask(input: UpdateTaskSchema & { id: string }) {
+  unstable_noStore();
+  try {
+    const data = await db
+      .update(tasks)
+      .set({
+        title: input.title,
+        label: input.label,
+        status: input.status,
+        priority: input.priority,
+      })
+      .where(eq(tasks.id, input.id))
+      .returning({
+        status: tasks.status,
+        priority: tasks.priority,
+      })
+      .then(takeFirstOrThrow);
+
+    revalidateTag("tasks");
+    if (data.status === input.status) {
+      revalidateTag("task-status-counts");
+    }
+    if (data.priority === input.priority) {
+      revalidateTag("task-priority-counts");
+    }
+
+    return {
+      data: null,
+      error: undefined,
+    };
+  } catch (err) {
+    return {
+      data: null,
+      error: getErrorMessage(err),
+    };
+  }
+}
+
+export async function updateTasks(input: {
+  ids: string[];
+  label?: Task["label"];
+  status?: Task["status"];
+  priority?: Task["priority"];
+}) {
+  unstable_noStore();
+  try {
+    const data = await db
+      .update(tasks)
+      .set({
+        label: input.label,
+        status: input.status,
+        priority: input.priority,
+      })
+      .where(inArray(tasks.id, input.ids))
+      .returning({
+        status: tasks.status,
+        priority: tasks.priority,
+      })
+      .then(takeFirstOrThrow);
+
+    revalidateTag("tasks");
+    if (data.status === input.status) {
+      revalidateTag("task-status-counts");
+    }
+    if (data.priority === input.priority) {
+      revalidateTag("task-priority-counts");
+    }
+
+    return {
+      data: null,
+      error: null,
+    };
+  } catch (err) {
+    return {
+      data: null,
+      error: getErrorMessage(err),
+    };
+  }
+}
+
+export async function deleteTask(input: { id: string }) {
+  unstable_noStore();
+  try {
+    await db.transaction(async (tx) => {
+      await tx.delete(tasks).where(eq(tasks.id, input.id));
+
+      // Create a new task for the deleted one
+      await tx.insert(tasks).values(generateRandomTask());
+    });
+
+    revalidateTag("tasks");
+    revalidateTag("task-status-counts");
+    revalidateTag("task-priority-counts");
+
+    return {
+      data: null,
+      error: null,
+    };
+  } catch (err) {
+    return {
+      data: null,
+      error: getErrorMessage(err),
+    };
+  }
+}
+
+export async function deleteTasks(input: { ids: string[] }) {
+  unstable_noStore();
+  try {
+    await db.transaction(async (tx) => {
+      await tx.delete(tasks).where(inArray(tasks.id, input.ids));
+
+      // Create new tasks for the deleted ones
+      await tx.insert(tasks).values(input.ids.map(() => generateRandomTask()));
+    });
+
+    revalidateTag("tasks");
+    revalidateTag("task-status-counts");
+    revalidateTag("task-priority-counts");
+
+    return {
+      data: null,
+      error: undefined,
+    };
+  } catch (err) {
+    return {
+      data: null,
+      error: getErrorMessage(err),
+    };
+  }
+}
+
+
+

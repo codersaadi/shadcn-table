@@ -17,7 +17,7 @@ import {
 
 import { filterColumns } from "@/lib/filter-columns";
 import { unstable_cache } from "@/lib/unstable-cache";
-
+// const unstable_cache = <T>(data: T) => data as T
 import type { GetTasksSchema } from "./validations";
 
 export async function getTasks(input: GetTasksSchema) {
@@ -26,8 +26,7 @@ export async function getTasks(input: GetTasksSchema) {
       try {
         const offset = (input.page - 1) * input.perPage;
         const advancedTable =
-          input.filterFlag === "advancedFilters" ||
-          input.filterFlag === "commandFilters";
+          input.filterFlag === "expert" || input.filterFlag === "command";
 
         const advancedWhere = filterColumns({
           table: tasks,
@@ -52,7 +51,7 @@ export async function getTasks(input: GetTasksSchema) {
                       : undefined,
                     input.estimatedHours[1]
                       ? lte(tasks.estimatedHours, input.estimatedHours[1])
-                      : undefined,
+                      : undefined
                   )
                 : undefined,
               input.createdAt.length > 0
@@ -64,7 +63,7 @@ export async function getTasks(input: GetTasksSchema) {
                             const date = new Date(input.createdAt[0]);
                             date.setHours(0, 0, 0, 0);
                             return date;
-                          })(),
+                          })()
                         )
                       : undefined,
                     input.createdAt[1]
@@ -74,17 +73,17 @@ export async function getTasks(input: GetTasksSchema) {
                             const date = new Date(input.createdAt[1]);
                             date.setHours(23, 59, 59, 999);
                             return date;
-                          })(),
+                          })()
                         )
-                      : undefined,
+                      : undefined
                   )
-                : undefined,
+                : undefined
             );
 
         const orderBy =
           input.sort.length > 0
             ? input.sort.map((item) =>
-                item.desc ? desc(tasks[item.id]) : asc(tasks[item.id]),
+                item.desc ? desc(tasks[item.id]) : asc(tasks[item.id])
               )
             : [asc(tasks.createdAt)];
 
@@ -122,7 +121,7 @@ export async function getTasks(input: GetTasksSchema) {
     {
       revalidate: 1,
       tags: ["tasks"],
-    },
+    }
   )();
 }
 
@@ -149,8 +148,8 @@ export async function getTaskStatusCounts() {
                 "in-progress": 0,
                 done: 0,
                 canceled: 0,
-              },
-            ),
+              }
+            )
           );
       } catch (_err) {
         return {
@@ -164,7 +163,7 @@ export async function getTaskStatusCounts() {
     ["task-status-counts"],
     {
       revalidate: 3600,
-    },
+    }
   )();
 }
 
@@ -190,8 +189,8 @@ export async function getTaskPriorityCounts() {
                 low: 0,
                 medium: 0,
                 high: 0,
-              },
-            ),
+              }
+            )
           );
       } catch (_err) {
         return {
@@ -204,7 +203,7 @@ export async function getTaskPriorityCounts() {
     ["task-priority-counts"],
     {
       revalidate: 3600,
-    },
+    }
   )();
 }
 
@@ -226,6 +225,6 @@ export async function getEstimatedHoursRange() {
     ["estimated-hours-range"],
     {
       revalidate: 3600,
-    },
+    }
   )();
 }

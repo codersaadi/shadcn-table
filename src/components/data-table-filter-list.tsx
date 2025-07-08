@@ -293,7 +293,6 @@ export function DataTableFilterList<TData>({
           <div className="flex w-full items-center gap-2">
             <Button
               size="sm"
-              className="rounded"
               ref={addButtonRef}
               onClick={onFilterAdd}
             >
@@ -303,7 +302,6 @@ export function DataTableFilterList<TData>({
               <Button
                 variant="outline"
                 size="sm"
-                className="rounded"
                 onClick={onFiltersReset}
               >
                 Reset filters
@@ -412,7 +410,7 @@ function DataTableFilterItem<TData>({
               <SelectTrigger
                 aria-label="Select join operator"
                 aria-controls={joinOperatorListboxId}
-                className="h-8 rounded lowercase [&[data-size]]:h-8"
+                className="h-8 lowercase [&[data-size]]:h-8"
               >
                 <SelectValue placeholder={joinOperator} />
               </SelectTrigger>
@@ -441,7 +439,7 @@ function DataTableFilterItem<TData>({
               aria-controls={fieldListboxId}
               variant="outline"
               size="sm"
-              className="w-32 justify-between rounded font-normal"
+              className="w-32 justify-between  font-normal"
             >
               <span className="truncate">
                 {columns.find((column) => column.id === filter.id)?.columnDef
@@ -509,7 +507,7 @@ function DataTableFilterItem<TData>({
         >
           <SelectTrigger
             aria-controls={operatorListboxId}
-            className="h-8 w-32 rounded lowercase [&[data-size]]:h-8"
+            className="h-8 w-32 lowercase [&[data-size]]:h-8"
           >
             <div className="truncate">
               <SelectValue placeholder={filter.operator} />
@@ -545,13 +543,13 @@ function DataTableFilterItem<TData>({
           aria-controls={filterItemId}
           variant="outline"
           size="icon"
-          className="size-8 rounded"
+          className="size-8 "
           onClick={() => onFilterRemove(filter.filterId)}
         >
           <Trash2 />
         </Button>
         <SortableItemHandle asChild>
-          <Button variant="outline" size="icon" className="size-8 rounded">
+          <Button variant="outline" size="icon" className="size-8 ">
             <GripVertical />
           </Button>
         </SortableItemHandle>
@@ -585,11 +583,10 @@ function onFilterInputRender<TData>({
       <div
         id={inputId}
         role="status"
-        aria-label={`${columnMeta?.label} filter is ${
-          filter.operator === "isEmpty" ? "empty" : "not empty"
-        }`}
+        aria-label={`${columnMeta?.label} filter is ${filter.operator === "isEmpty" ? "empty" : "not empty"
+          }`}
         aria-live="polite"
-        className="h-8 w-full rounded border bg-transparent dark:bg-input/30"
+        className="h-8 w-full border bg-transparent dark:bg-input/30"
       />
     );
   }
@@ -623,7 +620,7 @@ function onFilterInputRender<TData>({
           aria-describedby={`${inputId}-description`}
           inputMode={isNumber ? "numeric" : undefined}
           placeholder={columnMeta?.placeholder ?? "Enter a value..."}
-          className="h-8 w-full rounded"
+          className="h-8 w-full "
           defaultValue={
             typeof filter.value === "string" ? filter.value : undefined
           }
@@ -656,7 +653,7 @@ function onFilterInputRender<TData>({
             id={inputId}
             aria-controls={inputListboxId}
             aria-label={`${columnMeta?.label} boolean filter`}
-            className="h-8 w-full rounded [&[data-size]]:h-8"
+            className="h-8 w-full  [&[data-size]]:h-8"
           >
             <SelectValue placeholder={filter.value ? "True" : "False"} />
           </SelectTrigger>
@@ -700,7 +697,7 @@ function onFilterInputRender<TData>({
               aria-label={`${columnMeta?.label} filter value${multiple ? "s" : ""}`}
               variant="outline"
               size="sm"
-              className="w-full rounded font-normal"
+              className="w-full  font-normal"
             >
               <FacetedBadgeList
                 options={columnMeta?.options}
@@ -751,8 +748,8 @@ function onFilterInputRender<TData>({
       const displayValue =
         filter.operator === "isBetween" && dateValue.length === 2
           ? `${formatDate(new Date(Number(dateValue[0])))} - ${formatDate(
-              new Date(Number(dateValue[1])),
-            )}`
+            new Date(Number(dateValue[1])),
+          )}`
           : dateValue[0]
             ? formatDate(new Date(Number(dateValue[0])))
             : "Pick a date";
@@ -767,7 +764,7 @@ function onFilterInputRender<TData>({
               variant="outline"
               size="sm"
               className={cn(
-                "w-full justify-start rounded text-left font-normal",
+                "w-full justify-start  text-left font-normal",
                 !filter.value && "text-muted-foreground",
               )}
             >
@@ -788,21 +785,21 @@ function onFilterInputRender<TData>({
                 selected={
                   dateValue.length === 2
                     ? {
-                        from: new Date(Number(dateValue[0])),
-                        to: new Date(Number(dateValue[1])),
-                      }
+                      from: new Date(Number(dateValue[0])),
+                      to: new Date(Number(dateValue[1])),
+                    }
                     : {
-                        from: new Date(),
-                        to: new Date(),
-                      }
+                      from: new Date(),
+                      to: new Date(),
+                    }
                 }
                 onSelect={(date) => {
                   onFilterUpdate(filter.filterId, {
                     value: date
                       ? [
-                          (date.from?.getTime() ?? "").toString(),
-                          (date.to?.getTime() ?? "").toString(),
-                        ]
+                        (date.from?.getTime() ?? "").toString(),
+                        (date.to?.getTime() ?? "").toString(),
+                      ]
                       : [],
                   });
                 }}

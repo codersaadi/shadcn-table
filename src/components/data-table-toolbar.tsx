@@ -45,6 +45,7 @@ export function DataTableToolbar<TData>({
     >
       <div className="flex flex-1 flex-wrap items-center gap-2">
         {columns.map((column) => (
+          // search , and other filters
           <DataTableToolbarFilter key={column.id} column={column} />
         ))}
         {isFiltered && (

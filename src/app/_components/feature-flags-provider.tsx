@@ -9,41 +9,45 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { type FlagConfig, flagConfig } from "@/config/flag";
+import {
+  type TableFilterMode,
+  type TableFilterModeConfig,
+  tableFilterModeConfig
+} from "@/config/flag";
+import { cn } from "@/lib/utils";
 
-type FilterFlag = FlagConfig["featureFlags"][number]["value"];
-
-interface FeatureFlagsContextValue {
-  filterFlag: FilterFlag;
-  enableAdvancedFilter: boolean;
+interface TableFilterModeContextValue {
+  currentMode: TableFilterMode | null;
+  isAdvancedFilteringEnabled: boolean;
+  isCommandFilteringEnabled: boolean;
+  setFilterMode: (mode: TableFilterMode | null) => void;
 }
 
-const FeatureFlagsContext =
-  React.createContext<FeatureFlagsContextValue | null>(null);
+const TableFilterModeContext = React.createContext<TableFilterModeContextValue | null>(null);
 
-export function useFeatureFlags() {
-  const context = React.useContext(FeatureFlagsContext);
+export function useTableFilterMode(): TableFilterModeContextValue {
+  const context = React.useContext(TableFilterModeContext);
   if (!context) {
     throw new Error(
-      "useFeatureFlags must be used within a FeatureFlagsProvider",
+      "useTableFilterMode must be used within a TableFilterModeProvider"
     );
   }
   return context;
 }
 
-interface FeatureFlagsProviderProps {
+interface TableFilterModeProviderProps {
   children: React.ReactNode;
 }
 
-export function FeatureFlagsProvider({ children }: FeatureFlagsProviderProps) {
-  const [filterFlag, setFilterFlag] = useQueryState<FilterFlag | null>(
-    "filterFlag",
+export function TableFilterModeProvider({ children }: TableFilterModeProviderProps) {
+  const [currentMode, setCurrentMode] = useQueryState<TableFilterMode | null>(
+    "tableFilterMode",
     {
       parse: (value) => {
         if (!value) return null;
-        const validValues = flagConfig.featureFlags.map((flag) => flag.value);
-        return validValues.includes(value as FilterFlag)
-          ? (value as FilterFlag)
+        const validModes = tableFilterModeConfig.modes.map((mode) => mode.value);
+        return validModes.includes(value as TableFilterMode)
+          ? (value as TableFilterMode)
           : null;
       },
       serialize: (value) => value ?? "",
@@ -51,64 +55,64 @@ export function FeatureFlagsProvider({ children }: FeatureFlagsProviderProps) {
       clearOnDefault: true,
       shallow: false,
       eq: (a, b) => (!a && !b) || a === b,
-    },
+    }
   );
 
-  const onFilterFlagChange = React.useCallback(
-    (value: FilterFlag) => {
-      setFilterFlag(value);
+  const handleModeChange = React.useCallback(
+    (mode: string) => {
+      const newMode = mode as TableFilterMode;
+      setCurrentMode(currentMode === newMode ? null : newMode);
     },
-    [setFilterFlag],
+    [currentMode, setCurrentMode]
   );
 
-  const contextValue = React.useMemo<FeatureFlagsContextValue>(
-    () => ({
-      filterFlag,
-      enableAdvancedFilter:
-        filterFlag === "advancedFilters" || filterFlag === "commandFilters",
+  const contextValue = React.useMemo(
+    (): TableFilterModeContextValue => ({
+      currentMode,
+      isAdvancedFilteringEnabled: currentMode === "expert",
+      isCommandFilteringEnabled: currentMode === "command",
+      setFilterMode: setCurrentMode,
     }),
-    [filterFlag],
+    [currentMode, setCurrentMode]
   );
 
   return (
-    <FeatureFlagsContext.Provider value={contextValue}>
-      <div className="w-full overflow-x-auto p-1">
+    <TableFilterModeContext.Provider value={contextValue}>
+      <div className="flex items-center gap-4">
+        <span className="font-medium text-muted-foreground text-sm">
+          Filter Mode:
+        </span>
         <ToggleGroup
           type="single"
-          variant="outline"
-          size="sm"
-          value={filterFlag}
-          onValueChange={onFilterFlagChange}
-          className="w-fit gap-0"
+          value={currentMode ?? ""}
+          onValueChange={handleModeChange}
+          className="justify-start"
         >
-          {flagConfig.featureFlags.map((flag) => (
-            <Tooltip key={flag.value} delayDuration={700}>
-              <ToggleGroupItem
-                value={flag.value}
-                className="whitespace-nowrap px-3 text-xs data-[state=on]:bg-accent/70 data-[state=on]:hover:bg-accent/90"
-                asChild
-              >
-                <TooltipTrigger>
-                  <flag.icon className="size-3.5 shrink-0" />
-                  {flag.label}
-                </TooltipTrigger>
-              </ToggleGroupItem>
-              <TooltipContent
-                align="start"
-                side="bottom"
-                sideOffset={6}
-                className="flex flex-col gap-1.5 border bg-background py-2 font-semibold text-foreground [&>span]:hidden"
-              >
-                <div>{flag.tooltipTitle}</div>
-                <p className="text-balance text-muted-foreground text-xs">
-                  {flag.tooltipDescription}
-                </p>
+          {tableFilterModeConfig.modes.map((mode) => (
+            <Tooltip key={mode.value}>
+              <TooltipTrigger asChild>
+                <ToggleGroupItem
+                  value={mode.value}
+                  aria-label={`Enable ${mode.label}`}
+                  className={cn("flex items-center gap-2", mode.value === currentMode ? "bg-primary text-primary-foreground" : "text-muted-foreground")}
+                >
+                  <mode.icon className="h-4 w-4" />
+                  <span className="hidden sm:inline">{mode.label}</span>
+                </ToggleGroupItem>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs">
+                <div className="space-y-1">
+                  <p className="font-bold ">{mode.tooltipTitle}</p>
+                  <p className="text-background/80 text-sm">
+                    {mode.tooltipDescription}
+                  </p>
+                </div>
               </TooltipContent>
             </Tooltip>
           ))}
         </ToggleGroup>
       </div>
       {children}
-    </FeatureFlagsContext.Provider>
+    </TableFilterModeContext.Provider>
   );
 }

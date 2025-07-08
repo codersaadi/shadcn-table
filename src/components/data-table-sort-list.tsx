@@ -180,7 +180,7 @@ export function DataTableSortList<TData>({
             {sorting.length > 0 && (
               <Badge
                 variant="secondary"
-                className="h-[18.24px] rounded-[3.2px] px-[5.12px] font-mono font-normal text-[10.4px]"
+                className="h-[18.24px] -[3.2px] px-[5.12px] font-mono font-normal text-[10.4px]"
               >
                 {sorting.length}
               </Badge>
@@ -232,7 +232,7 @@ export function DataTableSortList<TData>({
           <div className="flex w-full items-center gap-2">
             <Button
               size="sm"
-              className="rounded"
+              className=""
               ref={addButtonRef}
               onClick={onSortAdd}
               disabled={columns.length === 0}
@@ -243,7 +243,7 @@ export function DataTableSortList<TData>({
               <Button
                 variant="outline"
                 size="sm"
-                className="rounded"
+                className=""
                 onClick={onSortingReset}
               >
                 Reset sorting
@@ -254,10 +254,10 @@ export function DataTableSortList<TData>({
       </Popover>
       <SortableOverlay>
         <div className="flex items-center gap-2">
-          <div className="h-8 w-[180px] rounded-sm bg-primary/10" />
-          <div className="h-8 w-24 rounded-sm bg-primary/10" />
-          <div className="size-8 shrink-0 rounded-sm bg-primary/10" />
-          <div className="size-8 shrink-0 rounded-sm bg-primary/10" />
+          <div className="h-8 w-[180px] -sm bg-primary/10" />
+          <div className="h-8 w-24 -sm bg-primary/10" />
+          <div className="size-8 shrink-0 -sm bg-primary/10" />
+          <div className="size-8 shrink-0 -sm bg-primary/10" />
         </div>
       </SortableOverlay>
     </Sortable>
@@ -319,6 +319,15 @@ function DataTableSortItem({
         className="flex items-center gap-2"
         onKeyDown={onItemKeyDown}
       >
+        <SortableItemHandle asChild>
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-8 shrink-0 "
+          >
+            <GripVertical />
+          </Button>
+        </SortableItemHandle>
         <Popover open={showFieldSelector} onOpenChange={setShowFieldSelector}>
           <PopoverTrigger asChild>
             <Button
@@ -327,7 +336,7 @@ function DataTableSortItem({
               aria-controls={fieldListboxId}
               variant="outline"
               size="sm"
-              className="w-44 justify-between rounded font-normal"
+              className="w-44 justify-between font-normal"
             >
               <span className="truncate">{columnLabels.get(sort.id)}</span>
               <ChevronsUpDown className="opacity-50" />
@@ -356,6 +365,7 @@ function DataTableSortItem({
             </Command>
           </PopoverContent>
         </Popover>
+
         <Select
           open={showDirectionSelector}
           onOpenChange={setShowDirectionSelector}
@@ -366,7 +376,7 @@ function DataTableSortItem({
         >
           <SelectTrigger
             aria-controls={directionListboxId}
-            className="h-8 w-24 rounded [&[data-size]]:h-8"
+            className="h-8 w-24  [&[data-size]]:h-8"
           >
             <SelectValue />
           </SelectTrigger>
@@ -385,20 +395,12 @@ function DataTableSortItem({
           aria-controls={sortItemId}
           variant="outline"
           size="icon"
-          className="size-8 shrink-0 rounded"
+          className="size-8 shrink-0 "
           onClick={() => onSortRemove(sort.id)}
         >
           <Trash2 />
         </Button>
-        <SortableItemHandle asChild>
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8 shrink-0 rounded"
-          >
-            <GripVertical />
-          </Button>
-        </SortableItemHandle>
+
       </div>
     </SortableItem>
   );

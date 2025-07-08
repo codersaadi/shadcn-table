@@ -41,9 +41,8 @@ interface GetTasksTableColumnsProps {
   statusCounts: Record<Task["status"], number>;
   priorityCounts: Record<Task["priority"], number>;
   estimatedHoursRange: { min: number; max: number };
-  setRowAction: React.Dispatch<
-    React.SetStateAction<DataTableRowAction<Task> | null>
-  >;
+  setRowAction: (value: DataTableRowAction<Task> | null) => void;
+
 }
 
 export function getTasksTableColumns({

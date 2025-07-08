@@ -8,12 +8,12 @@ import {
 } from "nuqs/server";
 import * as z from "zod";
 
-import { flagConfig } from "@/config/flag";
+import { tableFilterModeConfig } from "@/config/flag";
 import { getFiltersStateParser, getSortingStateParser } from "@/lib/parsers";
 
 export const searchParamsCache = createSearchParamsCache({
   filterFlag: parseAsStringEnum(
-    flagConfig.featureFlags.map((flag) => flag.value),
+    tableFilterModeConfig.modes.map((flag) => flag.value)
   ),
   page: parseAsInteger.withDefault(1),
   perPage: parseAsInteger.withDefault(10),
@@ -21,13 +21,14 @@ export const searchParamsCache = createSearchParamsCache({
     { id: "createdAt", desc: true },
   ]),
   title: parseAsString.withDefault(""),
+  // advanced filter
+  filters: getFiltersStateParser().withDefault([]),
+  joinOperator: parseAsStringEnum(["and", "or"]).withDefault("and"),
+
   status: parseAsArrayOf(z.enum(tasks.status.enumValues)).withDefault([]),
   priority: parseAsArrayOf(z.enum(tasks.priority.enumValues)).withDefault([]),
   estimatedHours: parseAsArrayOf(z.coerce.number()).withDefault([]),
   createdAt: parseAsArrayOf(z.coerce.number()).withDefault([]),
-  // advanced filter
-  filters: getFiltersStateParser().withDefault([]),
-  joinOperator: parseAsStringEnum(["and", "or"]).withDefault("and"),
 });
 
 export const createTaskSchema = z.object({

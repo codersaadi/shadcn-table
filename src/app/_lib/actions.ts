@@ -64,8 +64,8 @@ export async function createTask(input: CreateTaskSchema) {
               .where(not(eq(tasks.id, newTask.id)))
               .orderBy(asc(tasks.createdAt))
               .then(takeFirstOrThrow)
-          ).id,
-        ),
+          ).id
+        )
       );
     });
 
@@ -75,7 +75,7 @@ export async function createTask(input: CreateTaskSchema) {
 
     return {
       data: null,
-      error: null,
+      error: undefined,
     };
   } catch (err) {
     return {
@@ -113,7 +113,7 @@ export async function updateTask(input: UpdateTaskSchema & { id: string }) {
 
     return {
       data: null,
-      error: null,
+      error: undefined,
     };
   } catch (err) {
     return {
@@ -207,7 +207,7 @@ export async function deleteTasks(input: { ids: string[] }) {
 
     return {
       data: null,
-      error: null,
+      error: undefined,
     };
   } catch (err) {
     return {

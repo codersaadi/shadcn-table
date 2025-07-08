@@ -21,7 +21,7 @@ import {
 } from "drizzle-orm";
 
 export function filterColumns<T extends Table>({
-  table,
+  table, // table is model
   filters,
   joinOperator,
 }: {
@@ -87,57 +87,57 @@ export function filterColumns<T extends Table>({
         return filter.variant === "number" || filter.variant === "range"
           ? lt(column, filter.value)
           : filter.variant === "date" && typeof filter.value === "string"
-            ? lt(
-                column,
-                (() => {
-                  const date = new Date(Number(filter.value));
-                  date.setHours(23, 59, 59, 999);
-                  return date;
-                })(),
-              )
-            : undefined;
+          ? lt(
+              column,
+              (() => {
+                const date = new Date(Number(filter.value));
+                date.setHours(23, 59, 59, 999);
+                return date;
+              })()
+            )
+          : undefined;
 
       case "lte":
         return filter.variant === "number" || filter.variant === "range"
           ? lte(column, filter.value)
           : filter.variant === "date" && typeof filter.value === "string"
-            ? lte(
-                column,
-                (() => {
-                  const date = new Date(Number(filter.value));
-                  date.setHours(23, 59, 59, 999);
-                  return date;
-                })(),
-              )
-            : undefined;
+          ? lte(
+              column,
+              (() => {
+                const date = new Date(Number(filter.value));
+                date.setHours(23, 59, 59, 999);
+                return date;
+              })()
+            )
+          : undefined;
 
       case "gt":
         return filter.variant === "number" || filter.variant === "range"
           ? gt(column, filter.value)
           : filter.variant === "date" && typeof filter.value === "string"
-            ? gt(
-                column,
-                (() => {
-                  const date = new Date(Number(filter.value));
-                  date.setHours(0, 0, 0, 0);
-                  return date;
-                })(),
-              )
-            : undefined;
+          ? gt(
+              column,
+              (() => {
+                const date = new Date(Number(filter.value));
+                date.setHours(0, 0, 0, 0);
+                return date;
+              })()
+            )
+          : undefined;
 
       case "gte":
         return filter.variant === "number" || filter.variant === "range"
           ? gte(column, filter.value)
           : filter.variant === "date" && typeof filter.value === "string"
-            ? gte(
-                column,
-                (() => {
-                  const date = new Date(Number(filter.value));
-                  date.setHours(0, 0, 0, 0);
-                  return date;
-                })(),
-              )
-            : undefined;
+          ? gte(
+              column,
+              (() => {
+                const date = new Date(Number(filter.value));
+                date.setHours(0, 0, 0, 0);
+                return date;
+              })()
+            )
+          : undefined;
 
       case "isBetween":
         if (
@@ -153,7 +153,7 @@ export function filterColumns<T extends Table>({
                     const date = new Date(Number(filter.value[0]));
                     date.setHours(0, 0, 0, 0);
                     return date;
-                  })(),
+                  })()
                 )
               : undefined,
             filter.value[1]
@@ -163,9 +163,9 @@ export function filterColumns<T extends Table>({
                     const date = new Date(Number(filter.value[1]));
                     date.setHours(23, 59, 59, 999);
                     return date;
-                  })(),
+                  })()
                 )
-              : undefined,
+              : undefined
           );
         }
 
@@ -197,7 +197,7 @@ export function filterColumns<T extends Table>({
 
           return and(
             firstValue !== null ? gte(column, firstValue) : undefined,
-            secondValue !== null ? lte(column, secondValue) : undefined,
+            secondValue !== null ? lte(column, secondValue) : undefined
           );
         }
         return undefined;
@@ -221,13 +221,13 @@ export function filterColumns<T extends Table>({
               break;
             case "weeks":
               startDate = startOfDay(
-                addDays(today, Number.parseInt(amount) * 7),
+                addDays(today, Number.parseInt(amount) * 7)
               );
               endDate = endOfDay(addDays(startDate, 6));
               break;
             case "months":
               startDate = startOfDay(
-                addDays(today, Number.parseInt(amount) * 30),
+                addDays(today, Number.parseInt(amount) * 30)
               );
               endDate = endOfDay(addDays(startDate, 29));
               break;
@@ -251,7 +251,7 @@ export function filterColumns<T extends Table>({
   });
 
   const validConditions = conditions.filter(
-    (condition) => condition !== undefined,
+    (condition) => condition !== undefined
   );
 
   return validConditions.length > 0 ? joinFn(...validConditions) : undefined;
@@ -259,7 +259,7 @@ export function filterColumns<T extends Table>({
 
 export function getColumn<T extends Table>(
   table: T,
-  columnKey: keyof T,
+  columnKey: keyof T
 ): AnyColumn {
   return table[columnKey] as AnyColumn;
 }
